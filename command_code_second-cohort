@@ -1,0 +1,67 @@
+##version 20220621
+##Author: MT Lee
+
+##translocated to your project folder
+cd /d D:\AS_GWAS_project_folder\TPMI\TPMI2
+
+##QC1-missing rate, heterozygosity rate
+plink --bfile TPMI2_P_12 --mind 0.05 --make-bed --out TPMI2_P_12_QC1
+plink --bfile TPMI2_P_12_QC1 --het --out TPMI2_P_12_QC1
+
+*R
+setwd("D:/AS_GWAS_project_folder/TPMI/TPMI2")
+
+install.packages("het.test")
+library(het.test)
+
+het = read.table("TPMI2_P_12_QC1.het", header = TRUE) 
+het$meanHet = (het$N.NM. - het$O.HOM.) / het$N.NM. 
+upplimit <- mean(het$meanHet) + (3*sd(het$meanHet)) 
+lowlimit <- mean(het$meanHet) - (3*sd(het$meanHet)) 
+het.remove <- het[which(het$meanHet < lowlimit | het$meanHet > upplimit), c("FID", "IID")] 
+write.table(het.remove , "het.remove.txt", append = F, quote = F, sep = " ", row.names = F, col.names = F)
+
+plink --bfile TPMI2_P_12_QC1 --remove het.remove.txt --make-bed --out TPMI2_P_12_QC2
+
+##QC2-IBD
+plink --bfile TPMI2_P_12_QC2 --indep-pairwise 200 5 0.2 --out indep
+plink --bfile TPMI2_P_12_QC2 --extract indep.prune.in --genome --min 0.1875 --out related
+plink --bfile TPMI2_P_12_QC2 --remove related.genome --make-bed --out TPMI2_P_12_QC2
+
+##QC3-SNP QC
+plink --bfile TPMI2_P_12_QC2 --geno 0.05 --maf 0.05 --hwe 0.0001 --make-bed --out TPMI2_P_12_QC3
+
+##QC4-remove SNPs differential missing genotype rate between cases and controls
+plink --bfile TPMI2_P_12_QC3 --test-missing --out TPMI2_P_12_QC3
+
+*R
+missing = read.table("TPMI2_P_12_QC3.missing", header = TRUE)
+missing.exclude <- missing[which(missing$P < 0.001 ), c("SNP")]
+write.table(missing.exclude , "missing.exclude.txt", append = F, quote = F, sep = " ", row.names = , col.names = F)
+
+plink --bfile TPMI2_P_12_QC3 --exclude missing.exclude.txt --make-bed --out TPMI2_P_12_QC4
+
+##QC-PCA
+plink --bfile TPMI2_P_12_QC4 --indep-pairwise 200 5 0.2 -out indep1
+plink --bfile TPMI2_P_12_QC4 --extract indep1.prune.in --pca --out pca
+
+##移除對照表有缺失的
+plink --bfile TPMI2_P_12_QC4 --remove remove_covariate.txt --make-bed --out TPMI2_P_12_QC4_final
+
+##Regression analysis
+plink --bfile TPMI2_P_12_QC4_final --logistic --covar covariate_P_12.txt --covar-name Age,Sex,PC1-PC20 --hide-covar --out TPMI2_P_12_final_OR
+
+##Manhattan plot and QQ plot
+*R
+library(qqman)
+logit <- read.table("TPMI2_P_12_final_OR.assoc.logistic", header=TRUE)
+
+jpeg ("TPMI2_P_12_final_OR.manhattan.jpg") 
+manhattan(logit, main = "Manhattan Plot", ylim = c(0, 20)) 
+dev.off() 
+
+jpeg ("TPMI2_P_12_final_OR.qq.jpg") 
+qq(logit$P,main = "Q-Q Plot", ylim = c(0, 20)) 
+dev.off() 
+
+median((logit$STAT)^2)/0.455
