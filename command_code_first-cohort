@@ -2,7 +2,7 @@
 ##Author: MT Lee
 
 ##translocated to your project folder
-cd /d E:\AS_GWAS_project_folder\TPMI1
+cd /d D:\AS_GWAS_project_folder\TPMI1
 
 ##QC1-missing rate, heterozygosity rate
 plink --bfile TPMI1_P_12 --mind 0.05 --make-bed --out TPMI1_P_12_QC1
